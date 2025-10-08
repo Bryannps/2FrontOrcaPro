@@ -34,6 +34,17 @@ export interface RegisterData {
   document?: string
 }
 
+// Tipos de empresa
+export interface Company {
+  id: string
+  name: string
+  email: string
+  document?: string
+  settings: Record<string, any>
+  created_at: string
+  updated_at: string
+}
+
 // Tipos de templates
 export type FieldType = 'text' | 'number' | 'select' | 'date' | 'boolean' | 'calculated'
 
@@ -129,6 +140,7 @@ export interface Budget {
   version: number
   company_id: string
   template_id: string
+  company?: Company
   template?: BudgetTemplate
   items: BudgetItem[]
   created_at: string

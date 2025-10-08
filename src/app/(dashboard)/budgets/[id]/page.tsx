@@ -294,8 +294,8 @@ export default function BudgetDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                <h4 className="font-medium text-gray-900">{budget.company.name}</h4>
-                <p className="text-sm text-gray-600">{budget.company.email}</p>
+                <h4 className="font-medium text-gray-900">{budget.company?.name || 'Nome não disponível'}</h4>
+                <p className="text-sm text-gray-600">{budget.company?.email || 'Email não disponível'}</p>
               </div>
             </CardContent>
           </Card>
