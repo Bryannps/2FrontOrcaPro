@@ -13,10 +13,16 @@ import { ArrowLeft, Save, Calculator } from 'lucide-react';
 
 interface TemplateField {
   id: string;
-  name: string;
+  label: string;
   type: string;
   unit: string;
   default_cost: number;
+}
+
+interface Category {
+  id: string;
+  name: string;
+  fields: TemplateField[];
 }
 
 interface BudgetItem {
@@ -40,7 +46,7 @@ interface Budget {
     id: string;
     name: string;
     category: string;
-    fields: TemplateField[];
+    categories: Category[];
   };
   items: BudgetItem[];
 }
@@ -89,14 +95,28 @@ export default function EditBudgetPage() {
       setDescription(budgetData.description || '');
       setStatus(budgetData.status);
       
-      // Initialize field values with existing data
+      // Initialize field values with existing data and defaults
       const values: Record<string, { value: number; unitCost: number }> = {};
+      
+      // First, initialize all fields with defaults from template
+      budgetData.template.categories?.forEach((category: any) => {
+        category.fields.forEach((field: any) => {
+          values[field.label] = {
+            value: 1,
+            unitCost: field.default_cost || 0
+          };
+        });
+      });
+      
+      // Then override with existing data from budget items
+      // Note: item.field_name should correspond to field.label
       budgetData.items.forEach((item: BudgetItem) => {
         values[item.field_name] = {
-          value: item.value,
-          unitCost: item.unit_cost
+          value: item.value || 1,
+          unitCost: item.unit_cost || 0
         };
       });
+      
       setFieldValues(values);
       
     } catch (error) {
@@ -111,11 +131,32 @@ export default function EditBudgetPage() {
     if (!budget || Object.keys(fieldValues).length === 0) return;
 
     try {
-      const items = Object.entries(fieldValues).map(([fieldName, data]) => ({
-        field_name: fieldName,
-        value: data.value,
-        unit_cost: data.unitCost
-      }));
+      // Converter fieldValues para a estrutura esperada pelo backend
+      const items = budget.template.categories?.map((category, categoryIndex) => {
+        const categoryFieldValues: Record<string, any> = {};
+        
+        // Pegar os valores dos campos desta categoria
+        category.fields.forEach(field => {
+          const fieldValue = fieldValues[field.label];
+          if (fieldValue) {
+            categoryFieldValues[field.label] = {
+              value: fieldValue.value,
+              unit_cost: fieldValue.unitCost
+            };
+          }
+        });
+
+        return {
+          category_id: category.id,
+          field_values: categoryFieldValues,
+          order: categoryIndex
+        };
+      }).filter(item => Object.keys(item.field_values).length > 0) || [];
+
+      if (items.length === 0) {
+        console.warn('Nenhum item válido para cálculo');
+        return;
+      }
 
       const response = await api.post('/budgets/calculate', {
         template_id: budget.template.id,
@@ -123,10 +164,10 @@ export default function EditBudgetPage() {
       });
 
       const calculation = response.data.data;
-      setSubtotal(calculation.subtotal);
-      setTaxAmount(calculation.tax_amount);
-      setProfitAmount(calculation.profit_amount);
-      setTotalAmount(calculation.total_amount);
+      setSubtotal(calculation.subtotal || 0);
+      setTaxAmount(calculation.tax_amount || 0);
+      setProfitAmount(calculation.profit_amount || 0);
+      setTotalAmount(calculation.total || 0);
     } catch (error) {
       console.error('Erro ao calcular totais:', error);
     }
@@ -151,21 +192,36 @@ export default function EditBudgetPage() {
     try {
       setSaving(true);
 
-      const items = Object.entries(fieldValues).map(([fieldName, data]) => ({
-        field_name: fieldName,
-        value: data.value,
-        unit_cost: data.unitCost
-      }));
+      // Converter fieldValues para a estrutura esperada pelo backend
+      const items = budget.template.categories?.map((category, categoryIndex) => {
+        const categoryFieldValues: Record<string, any> = {};
+        
+        // Pegar os valores dos campos desta categoria
+        category.fields.forEach(field => {
+          const fieldValue = fieldValues[field.label];
+          if (fieldValue) {
+            categoryFieldValues[field.label] = {
+              value: fieldValue.value,
+              unit_cost: fieldValue.unitCost
+            };
+          }
+        });
+
+        return {
+          category_id: category.id,
+          field_values: categoryFieldValues,
+          order: categoryIndex
+        };
+      }).filter(item => Object.keys(item.field_values).length > 0) || [];
 
       const budgetData = {
         title: title.trim(),
         description: description.trim(),
         status,
-        template_id: budget.template.id,
         items
       };
 
-      await api.patch(`/budgets/${budget.id}`, budgetData);
+      await api.put(`/budgets/${budget.id}`, budgetData);
       
       alert('Orçamento atualizado com sucesso!');
       router.push(`/budgets/${budget.id}`);
@@ -298,62 +354,74 @@ export default function EditBudgetPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-6">
-                {budget.template.fields.map((field) => {
-                  const fieldValue = fieldValues[field.name] || {
-                    value: 1,
-                    unitCost: field.default_cost
-                  };
-
-                  return (
-                    <div key={field.id} className="border rounded-lg p-4">
-                      <h4 className="font-medium text-gray-900 mb-3">{field.name}</h4>
+                {budget.template.categories?.map((category) => (
+                  <div key={category.id} className="space-y-4">
+                    <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">
+                      {category.name}
+                    </h3>
+                    
+                    {category.fields.map((field) => {
+                      const fieldValue = fieldValues[field.label] || {
+                        value: 1,
+                        unitCost: field.default_cost || 0
+                      };
                       
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                          <Label>Quantidade</Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={fieldValue.value}
-                            onChange={(e) => handleFieldChange(
-                              field.name, 
-                              'value', 
-                              parseFloat(e.target.value) || 0
-                            )}
-                            className="mt-1"
-                          />
-                          <p className="text-xs text-gray-500 mt-1">
-                            Unidade: {field.unit}
-                          </p>
-                        </div>
+                      // Garantir que os valores são números válidos
+                      const safeValue = typeof fieldValue.value === 'number' && !isNaN(fieldValue.value) ? fieldValue.value : 1;
+                      const safeUnitCost = typeof fieldValue.unitCost === 'number' && !isNaN(fieldValue.unitCost) ? fieldValue.unitCost : (field.default_cost || 0);
 
-                        <div>
-                          <Label>Custo Unitário</Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={fieldValue.unitCost}
-                            onChange={(e) => handleFieldChange(
-                              field.name, 
-                              'unitCost', 
-                              parseFloat(e.target.value) || 0
-                            )}
-                            className="mt-1"
-                          />
-                        </div>
+                      return (
+                        <div key={field.id} className="border rounded-lg p-4">
+                          <h4 className="font-medium text-gray-900 mb-3">{field.label}</h4>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <Label>Quantidade</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={safeValue}
+                                onChange={(e) => handleFieldChange(
+                                  field.label, 
+                                  'value', 
+                                  parseFloat(e.target.value) || 0
+                                )}
+                                className="mt-1"
+                              />
+                              <p className="text-xs text-gray-500 mt-1">
+                                Unidade: {field.unit}
+                              </p>
+                            </div>
 
-                        <div>
-                          <Label>Total</Label>
-                          <div className="mt-1 px-3 py-2 bg-gray-50 border rounded-md">
-                            {formatCurrency(fieldValue.value * fieldValue.unitCost)}
+                            <div>
+                              <Label>Custo Unitário</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={safeUnitCost}
+                                onChange={(e) => handleFieldChange(
+                                  field.label, 
+                                  'unitCost', 
+                                  parseFloat(e.target.value) || 0
+                                )}
+                                className="mt-1"
+                              />
+                            </div>
+
+                            <div>
+                              <Label>Total</Label>
+                              <div className="mt-1 px-3 py-2 bg-gray-50 border rounded-md">
+                                {formatCurrency(safeValue * safeUnitCost)}
+                              </div>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>

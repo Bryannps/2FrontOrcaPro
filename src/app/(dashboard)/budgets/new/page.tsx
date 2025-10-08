@@ -202,7 +202,7 @@ export default function NewBudgetPage() {
     try {
       const response = await api.post(apiEndpoints.budgets.calculate, payload);
       console.log('Success response:', response.data);
-      setCalculatedTotal(response.data.data.total_value || 0);
+      setCalculatedTotal(response.data.data.total || 0);
     } catch (error: any) {
       console.error('Erro ao calcular orçamento:', error);
       
