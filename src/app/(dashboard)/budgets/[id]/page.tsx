@@ -22,23 +22,31 @@ import {
 
 interface BudgetItem {
   id: string;
-  field_name: string;
-  value: number;
-  unit_cost: number;
-  total_cost: number;
+  field_values: Record<string, any>;
+  amount: number;
+  order: number;
+  category: {
+    id: string;
+    name: string;
+  };
 }
 
 interface Budget {
   id: string;
   title: string;
-  description: string;
+  description?: string;
   status: string;
-  subtotal: number;
-  tax_amount: number;
-  profit_amount: number;
   total_amount: number;
+  custom_data: {
+    subtotals?: Record<string, number>;
+    metadata?: {
+      base_total?: number;
+      taxes?: number;
+      profit_margin?: number;
+      category_breakdown?: Record<string, number>;
+    };
+  };
   created_at: string;
-  updated_at: string;
   company: {
     id: string;
     name: string;
@@ -47,7 +55,15 @@ interface Budget {
   template: {
     id: string;
     name: string;
-    category: string;
+    categories: Array<{
+      id: string;
+      name: string;
+      fields: Array<{
+        id: string;
+        label: string;
+        type: string;
+      }>;
+    }>;
   };
   items: BudgetItem[];
 }
@@ -229,12 +245,12 @@ export default function BudgetDetailPage() {
                   <h4 className="font-medium text-gray-700 mb-1">Template Utilizado</h4>
                   <p className="text-gray-600">{budget.template.name}</p>
                   <span className="text-sm text-gray-500">
-                    Categoria: {budget.template.category}
+                    {budget.template.categories.length} categoria(s)
                   </span>
                 </div>
                 <div>
-                  <h4 className="font-medium text-gray-700 mb-1">Última Atualização</h4>
-                  <p className="text-gray-600">{formatDate(budget.updated_at)}</p>
+                  <h4 className="font-medium text-gray-700 mb-1">Status</h4>
+                  <p className="text-gray-600">{getStatusBadge(budget.status)}</p>
                 </div>
               </div>
             </CardContent>
@@ -263,18 +279,29 @@ export default function BudgetDetailPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {budget.items.map((item) => (
-                      <tr key={item.id} className="border-b">
-                        <td className="py-3 px-4 text-gray-900">{item.field_name}</td>
-                        <td className="py-3 px-4 text-right text-gray-600">{item.value}</td>
-                        <td className="py-3 px-4 text-right text-gray-600">
-                          {formatCurrency(item.unit_cost)}
-                        </td>
-                        <td className="py-3 px-4 text-right font-medium text-gray-900">
-                          {formatCurrency(item.total_cost)}
-                        </td>
-                      </tr>
-                    ))}
+                    {budget.items.map((item) => {
+                      // Extrair informações dos field_values
+                      const fieldEntries = Object.entries(item.field_values || {});
+                      
+                      return fieldEntries.map(([fieldName, fieldData], fieldIndex) => {
+                        const value = typeof fieldData === 'object' ? fieldData.value || 0 : fieldData;
+                        const unitCost = typeof fieldData === 'object' ? fieldData.unit_cost || 0 : 0;
+                        const total = typeof value === 'number' && typeof unitCost === 'number' ? value * unitCost : 0;
+                        
+                        return (
+                          <tr key={`${item.id}-${fieldIndex}`} className="border-b">
+                            <td className="py-3 px-4 text-gray-900">{fieldName}</td>
+                            <td className="py-3 px-4 text-right text-gray-600">{value}</td>
+                            <td className="py-3 px-4 text-right text-gray-600">
+                              {formatCurrency(unitCost)}
+                            </td>
+                            <td className="py-3 px-4 text-right font-medium text-gray-900">
+                              {formatCurrency(total)}
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -311,20 +338,22 @@ export default function BudgetDetailPage() {
             <CardContent className="space-y-4">
               <div className="flex justify-between">
                 <span className="text-gray-600">Subtotal:</span>
-                <span className="font-medium">{formatCurrency(budget.subtotal)}</span>
+                <span className="font-medium">
+                  {formatCurrency(budget.custom_data?.metadata?.base_total || 0)}
+                </span>
               </div>
               
               <div className="flex justify-between">
                 <span className="text-gray-600">Margem de Lucro:</span>
                 <span className="font-medium text-green-600">
-                  {formatCurrency(budget.profit_amount)}
+                  {formatCurrency(budget.custom_data?.metadata?.profit_margin || 0)}
                 </span>
               </div>
               
               <div className="flex justify-between">
                 <span className="text-gray-600">Impostos:</span>
                 <span className="font-medium text-orange-600">
-                  {formatCurrency(budget.tax_amount)}
+                  {formatCurrency(budget.custom_data?.metadata?.taxes || 0)}
                 </span>
               </div>
               
@@ -357,15 +386,13 @@ export default function BudgetDetailPage() {
                   </div>
                 </div>
                 
-                {budget.updated_at !== budget.created_at && (
-                  <div className="flex items-start gap-3">
-                    <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">Última atualização</p>
-                      <p className="text-xs text-gray-500">{formatDate(budget.updated_at)}</p>
-                    </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">Status atual</p>
+                    <p className="text-xs text-gray-500">{getStatusBadge(budget.status)}</p>
                   </div>
-                )}
+                </div>
               </div>
             </CardContent>
           </Card>
