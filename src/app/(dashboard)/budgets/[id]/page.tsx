@@ -75,6 +75,8 @@ export default function BudgetDetailPage() {
   const [loading, setLoading] = useState(true);
   const [budget, setBudget] = useState<Budget | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   const budgetId = params.id as string;
 
@@ -109,6 +111,55 @@ export default function BudgetDetailPage() {
       alert('Erro ao excluir orçamento');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleExportPdf = async () => {
+    if (!budget) return;
+
+    try {
+      setExportingPdf(true);
+      const response = await api.get(`/budgets/${budget.id}/export/pdf`, {
+        responseType: 'blob'
+      });
+      
+      // Criar link de download
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `orcamento-${budget.title.replace(/\s+/g, '-').toLowerCase()}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Erro ao exportar PDF:', error);
+      alert('Erro ao exportar PDF');
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  const handleSendEmail = async () => {
+    if (!budget) return;
+
+    const email = prompt('Digite o email de destino:');
+    if (!email) return;
+
+    try {
+      setSendingEmail(true);
+      await api.post(`/budgets/${budget.id}/send-email`, {
+        to: email,
+        subject: `Orçamento: ${budget.title}`,
+        message: `Segue em anexo o orçamento "${budget.title}" solicitado.`
+      });
+      alert('Email enviado com sucesso!');
+    } catch (error) {
+      console.error('Erro ao enviar email:', error);
+      alert('Erro ao enviar email');
+    } finally {
+      setSendingEmail(false);
     }
   };
 
@@ -193,13 +244,23 @@ export default function BudgetDetailPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={handleExportPdf}
+            disabled={exportingPdf}
+          >
             <Download className="h-4 w-4 mr-2" />
-            Exportar PDF
+            {exportingPdf ? 'Exportando...' : 'Exportar PDF'}
           </Button>
-          <Button variant="outline" size="sm">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={handleSendEmail}
+            disabled={sendingEmail}
+          >
             <Send className="h-4 w-4 mr-2" />
-            Enviar por E-mail
+            {sendingEmail ? 'Enviando...' : 'Enviar por E-mail'}
           </Button>
           <Button
             variant="outline"
